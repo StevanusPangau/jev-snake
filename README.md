@@ -142,6 +142,7 @@ python simulate.py
 
 - **No Secrets in Repo**: API keys and environment files are ignored via `.gitignore`.
 - **Abuse Guard Rate Limiting**: Built-in in-memory token bucket (`120 requests / 30s` per IP) with automatic stale client cleanup.
+- **Daily Token Budget**: Server-side daily input-token cap (default `2M tokens/day` ≈ `$0.084`, configurable via `JEV_DAILY_TOKEN_BUDGET`). When exhausted, the server transparently switches to deterministic fallback mode — the game keeps working and worst-case upstream cost stays bounded even against distributed abuse.
 - **Proxy Aware**: Resolves client IPs correctly via `CF-Connecting-IP` and `X-Forwarded-For`.
 - **Security Headers**: Injected automatically (`Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`).
 - **Input Validation**: Pydantic schemas enforce bounds on candidate moves and instruction strings to prevent payload amplification.

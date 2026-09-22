@@ -55,6 +55,40 @@ BUCKET_WINDOW_S = 30.0
 _buckets: dict[str, deque[float]] = {}
 _bucket_lock = threading.Lock()
 
+# Daily token budget: bounds worst-case upstream cost from distributed abuse.
+# When the budget is exhausted, the server transparently switches to the
+# deterministic fallback (the game keeps working; only Jev calls stop until
+# the next UTC day). Default 2M input tokens/day ≈ $0.084 at official pricing.
+DAILY_TOKEN_BUDGET = int(os.environ.get("JEV_DAILY_TOKEN_BUDGET", "2000000"))
+_daily_usage = {"date": time.strftime("%Y-%m-%d", time.gmtime()), "input": 0}
+_daily_lock = threading.Lock()
+
+
+def _roll_daily_window() -> None:
+    """Reset the daily counter when the UTC day changes. Caller holds the lock."""
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    if _daily_usage["date"] != today:
+        _daily_usage["date"] = today
+        _daily_usage["input"] = 0
+
+
+def daily_budget_ok() -> bool:
+    with _daily_lock:
+        _roll_daily_window()
+        return _daily_usage["input"] < DAILY_TOKEN_BUDGET
+
+
+def daily_tokens_add(n: int) -> None:
+    with _daily_lock:
+        _roll_daily_window()
+        _daily_usage["input"] += n
+
+
+def daily_tokens_used() -> int:
+    with _daily_lock:
+        _roll_daily_window()
+        return _daily_usage["input"]
+
 _jev_down = False
 _last_note: str | None = None
 
@@ -162,7 +196,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="jev-snake", docs_url=None, redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="jev-snake", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
 
 # ---- Security Headers Middleware ----
@@ -309,11 +343,13 @@ async def decide(req: Request, payload: DecideRequest):
             )
         payload.state = _sanitize_state(payload.state)
 
-    if API_KEY:
+    budget_exhausted = API_KEY and not daily_budget_ok()
+    if API_KEY and not budget_exhausted:
         try:
             action, conf, probs, ms, usage = call_jev(payload)
             inp_tok = int(usage.get("input_tokens") or 0)
             out_tok = int(usage.get("output_tokens") or 0)
+            daily_tokens_add(inp_tok)
 
             # Persist to SQLite atomically
             db.record_usage(inp_tok, out_tok, is_jev_request=True)
@@ -330,6 +366,9 @@ async def decide(req: Request, payload: DecideRequest):
         except Exception as exc:
             _last_note = str(exc)
             logger.warning("Falling back to deterministic pathing: %s", exc)
+    elif budget_exhausted:
+        _last_note = "Daily token budget exhausted; running in fallback mode"
+        logger.warning("Daily token budget (%d) exhausted; falling back to deterministic pathing", DAILY_TOKEN_BUDGET)
     else:
         _last_note = "TYPESAFE_API_KEY is not configured"
 
@@ -357,6 +396,9 @@ async def status():
     return {
         "jev_key_configured": bool(API_KEY),
         "jev_down": _jev_down,
+        "daily_input_tokens": daily_tokens_used(),
+        "daily_budget": DAILY_TOKEN_BUDGET,
+        "daily_budget_exhausted": not daily_budget_ok(),
         "note": note,
     }
 
