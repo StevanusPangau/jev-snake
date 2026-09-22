@@ -20,6 +20,8 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Any
 
+from anyio import to_thread
+
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -191,6 +193,10 @@ def _sanitize_state(value: Any, depth: int = 0) -> Any:
 # ---- FastAPI Lifespan ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Sync endpoints (blocking Jev HTTP call + SQLite) run in the anyio
+    # threadpool. Default is 40 tokens; raise it so ~100 concurrent players
+    # can hold an in-flight upstream call each without queueing.
+    to_thread.current_default_thread_limiter().total_tokens = 80
     db.init_db()
     logger.info("jev-snake server initialized with persistent SQLite telemetry.")
     yield
@@ -314,8 +320,11 @@ def call_jev(payload: DecideRequest) -> tuple[str, float, dict[str, float], int,
 
 
 # ---- Routes ----
+# NOTE: deliberately a sync def — FastAPI runs it in the threadpool so the
+# blocking Jev HTTP call never stalls the event loop. Making this async again
+# would serialize ALL players behind one upstream call (~0.9s each).
 @app.post("/api/decide", response_model=DecideResponse)
-async def decide(req: Request, payload: DecideRequest):
+def decide(req: Request, payload: DecideRequest):
     global _last_note
     client_ip = get_client_ip(req)
     if not rate_ok(client_ip):
