@@ -369,7 +369,7 @@ async def usage():
         "input_tokens": inp_tok,
         "output_tokens": out_tok,
         "cost_usd": round(cost, 6),
-        "price_note": "Jev official: $42 / 1M input tokens; output tokens are free",
+        "price_note": "Jev official: $42 per 1B input tokens ($0.042 / 1M); output tokens are free",
         "requests": requests,
     }
 
