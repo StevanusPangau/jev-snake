@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jev Snake — a System One model plays Snake</title>
+<style>
+  :root {
+    --bg:#0d0d0f; --panel:#141417; --panel2:#19191e; --line:#24242a;
+    --ink:#e9e9ec; --mut:#9898a0; --acc:#f97316; --acc2:#fb923c;
+    --good:#22c55e; --bad:#ef4444;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body {
+    height:100%; width:100%;
+    background:var(--bg); color:var(--ink);
+    font:13px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;
+  }
+  body {
+    display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+
+  /* ---- Header ---- */
+  header {
+    flex-shrink:0;
+    padding:10px 24px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#15151a,#0d0d0f);
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:nowrap;
+  }
+  .head-left { display:flex; align-items:baseline; gap:14px; min-width:0; }
+  header h1 { margin:0; font-size:18px; letter-spacing:-.01em; white-space:nowrap; }
+  header h1 span { color:var(--acc); }
+  header p { margin:0; color:var(--mut); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  header code { color:var(--acc); font-family:ui-monospace,monospace; }
+  .head-right { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+  .meta-pill {
+    font-size:11px; color:var(--mut); background:var(--panel2); border:1px solid var(--line);
+    border-radius:99px; padding:3px 10px; display:flex; align-items:center; gap:6px;
+  }
+  .meta-pill .dot { width:6px; height:6px; border-radius:50%; background:var(--good); display:inline-block; }
+
+  /* ---- Main 3-Column Dashboard ---- */
+  main {
+    flex:1; min-height:0;
+    display:grid;
+    grid-template-columns: minmax(360px, 1.2fr) minmax(320px, 1fr) minmax(320px, 1fr);
+    gap:14px;
+    padding:14px 24px;
+  }
+
+  /* Column flex containers */
+  .col {
+    display:flex; flex-direction:column; gap:12px; min-height:0; height:100%;
+  }
+
+  /* Panels */
+  .panel {
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; display:flex; flex-direction:column;
+  }
+  .panel.flex-fill {
+    flex:1; min-height:0;
+  }
+  .panel-head {
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-shrink:0;
+  }
+  .panel h2 {
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:0;
+  }
+
+  /* ---- Column 1: Game Arena ---- */
+  .game-panel {
+    flex:1; height:100%; display:flex; flex-direction:column; min-height:0;
+  }
+  .canvas-wrap {
+    flex:1; min-height:0; display:flex; align-items:center; justify-content:center;
+    padding:4px 0; overflow:hidden;
+  }
+  canvas {
+    max-width:100%; max-height:100%; aspect-ratio:1/1; width:auto; height:auto;
+    background:#0a0a0b; border:1px solid var(--line); border-radius:8px;
+    box-shadow:0 4px 24px rgba(0,0,0,.5);
+    display:block;
+  }
+  .stats-grid {
+    display:grid; grid-template-columns:repeat(5, 1fr); gap:7px; margin:8px 0; flex-shrink:0;
+  }
+  .stat-box {
+    background:var(--panel2); border:1px solid var(--line); border-radius:7px;
+    padding:6px 6px; text-align:center;
+  }
+  .stat-box b { font-size:16px; display:block; font-variant-numeric:tabular-nums; }
+  .stat-box span { color:var(--mut); font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; }
+
+  .controls-row {
+    display:flex; gap:8px; align-items:center; flex-shrink:0;
+  }
+  button {
+    background:var(--acc); border:0; color:#141414; font-weight:700;
+    border-radius:6px; padding:7px 14px; cursor:pointer; font-size:12.5px;
+    transition:background .1s; flex:1; text-align:center;
+  }
+  button:hover { background:var(--acc2); }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button.ghost:hover { border-color:var(--acc); color:var(--acc); }
+  button:disabled { opacity:.45; cursor:default; }
+
+  /* ---- Column 2: Coaching & Decision ---- */
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  input[type=text] {
+    flex:1; min-width:140px; background:#0a0a0b; border:1px solid var(--line);
+    color:var(--ink); border-radius:6px; padding:6px 10px; font-size:12.5px;
+  }
+  input[type=text]:focus { outline:1px solid var(--acc); border-color:var(--acc); }
+  .chips { display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+  .chip {
+    font-size:11px; color:var(--mut); border:1px solid var(--line);
+    border-radius:99px; padding:2.5px 8px; cursor:pointer; transition:color .1s, border-color .1s;
+  }
+  .chip:hover { color:var(--acc); border-color:var(--acc); }
+
+  .decision { font-family:ui-monospace,SFMono-Regular,monospace; font-size:12px; }
+  .dec-target { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .dec-label { color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  .badge { display:inline-block; border-radius:5px; padding:2px 7px; font-size:10px; font-weight:700; }
+  .badge.jev { background:rgba(34,197,94,.15); color:var(--good); border:1px solid rgba(34,197,94,.3); }
+  .badge.fb { background:rgba(239,68,68,.15); color:var(--bad); border:1px solid rgba(239,68,68,.3); }
+  .badge.outline { background:transparent; color:var(--mut); border:1px solid var(--line); }
+  .bar { height:6px; background:#0a0a0b; border:1px solid var(--line); border-radius:99px; overflow:hidden; margin:2px 0 5px; }
+  .bar i { display:block; height:100%; background:var(--acc); transition:width .12s; }
+  .prob { display:grid; grid-template-columns:85px 1fr 38px; gap:8px; align-items:center; margin:1px 0; font-size:11.5px; }
+
+  .klog {
+    flex:1; min-height:0; overflow-y:auto; color:var(--mut); padding-right:4px;
+  }
+  .klog::-webkit-scrollbar { width:4px; }
+  .klog::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
+  .klog div { border-bottom:1px dashed var(--line); padding:3px 0; font-family:ui-monospace,monospace; font-size:11px; }
+
+  /* ---- Column 3: Token Usage & Economics ---- */
+  .usage-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .ucell { background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:6px 9px; }
+  .ucell b { display:block; font-size:15px; font-variant-numeric:tabular-nums; }
+  .ucell span { color:var(--mut); font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; }
+  .unote { color:var(--mut); font-size:10.5px; margin-top:5px; }
+
+  /* Economics quota breakdown */
+  .econ-list {
+    display:flex; flex-direction:column; gap:7px; flex:1; justify-content:space-around;
+  }
+  .econ-card {
+    background:var(--panel2); border:1px solid var(--line); border-radius:7px;
+    padding:7px 10px; display:flex; flex-direction:column; gap:2px;
+  }
+  .econ-head {
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .econ-title {
+    font-size:11.5px; font-weight:600; color:var(--ink);
+  }
+  .econ-value {
+    font-size:11px; font-weight:700; color:var(--good); font-family:ui-monospace,monospace;
+  }
+  .econ-desc {
+    font-size:10.5px; color:var(--mut); line-height:1.35;
+  }
+  .econ-desc code {
+    color:var(--acc); font-family:ui-monospace,monospace; font-size:10px;
+  }
+
+  /* ---- Footer ---- */
+  footer {
+    flex-shrink:0;
+    padding:6px 24px 8px;
+    border-top:1px solid var(--line);
+    background:#0d0d0f;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11px; color:var(--mut);
+  }
+  .foot-left { display:flex; align-items:center; gap:8px; }
+  .foot-left b { color:var(--ink); }
+  .foot-right { display:flex; align-items:center; gap:8px; }
+
+  .info-btn {
+    background:transparent; border:1px solid var(--line); color:var(--mut);
+    width:20px; height:20px; border-radius:50%; padding:0;
+    display:inline-flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:all .15s ease; flex:0 0 auto;
+  }
+  .info-btn:hover {
+    color:var(--acc); border-color:var(--acc); background:rgba(249,115,22,0.1);
+  }
+
+  /* ---- Modal Backdrop & Dialog ---- */
+  .modal-backdrop {
+    position:fixed; inset:0;
+    background:rgba(0,0,0,0.75);
+    backdrop-filter:blur(5px);
+    z-index:9999;
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+    animation:fadeIn .15s ease-out;
+  }
+  @keyframes fadeIn {
+    from { opacity:0; } to { opacity:1; }
+  }
+  .modal-dialog {
+    background:#141418;
+    border:1px solid var(--line);
+    border-radius:12px;
+    max-width:580px; width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,0.75);
+    overflow:hidden;
+    animation:slideUp .15s ease-out;
+  }
+  @keyframes slideUp {
+    from { transform:translateY(12px); opacity:0; }
+    to { transform:translateY(0); opacity:1; }
+  }
+  .modal-header {
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center;
+    background:linear-gradient(180deg,#18181f,#141418);
+  }
+  .modal-title {
+    margin:0; font-size:15px; font-weight:700; color:var(--ink);
+  }
+  .modal-subtitle {
+    font-size:11px; color:var(--mut); display:block; margin-top:2px;
+  }
+  .modal-close {
+    background:transparent; border:0;
+    color:var(--mut); font-size:20px; line-height:1;
+    cursor:pointer; padding:4px 8px; border-radius:4px;
+    transition:color .1s; flex:0 0 auto;
+  }
+  .modal-close:hover { color:var(--acc); }
+  .modal-body {
+    padding:16px 18px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .arch-card {
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+    display:flex; gap:12px; align-items:flex-start;
+  }
+  .arch-card-icon {
+    font-size:16px; margin-top:1px; flex-shrink:0;
+  }
+  .arch-card-content h3 {
+    margin:0 0 3px; font-size:12px; font-weight:600; color:var(--ink);
+  }
+  .arch-card-content p {
+    margin:0; font-size:11px; color:var(--mut); line-height:1.4;
+  }
+  .arch-card-content code {
+    color:var(--acc); font-family:ui-monospace,monospace; font-size:10.5px;
+  }
+
+  /* Responsive behavior for mobile / short viewports */
+  @media (max-width: 1080px), (max-height: 640px) {
+    body { overflow-y:auto; height:auto; }
+    main { display:flex; flex-direction:column; height:auto; overflow:visible; }
+    .col { height:auto; }
+    .game-panel { height:auto; }
+    .canvas-wrap { aspect-ratio:1/1; height:460px; }
+    .klog { max-height:140px; }
+    header p { white-space:normal; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-left">
+    <h1>🐍 Jev <span>plays</span> Snake</h1>
+    <p>A System One model (TypeSafe Jev) acts as high-level strategist selecting waypoints via calibrated Choice, while fast local code executes BFS-guarded pathing.</p>
+  </div>
+  <div class="head-right">
+    <div class="meta-pill">
+      <span class="dot"></span>
+      <span id="modelInfo">jev-latest</span>
+    </div>
+    <div class="meta-pill">160ms tick · ~2.6s cadence</div>
+  </div>
+</header>
+
+<main>
+  <!-- ======== Column 1: Game Arena ======== -->
+  <div class="col">
+    <div class="panel game-panel">
+      <div class="panel-head">
+        <h2>Game Arena · 24×24 Grid</h2>
+        <span class="badge outline" id="arenaBadge">READY</span>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="board" width="600" height="600"></canvas>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-box"><b id="score">0</b><span>Score</span></div>
+        <div class="stat-box"><b id="len">3</b><span>Length</span></div>
+        <div class="stat-box"><b id="ticks">0</b><span>Ticks</span></div>
+        <div class="stat-box"><b id="wp">—</b><span>Waypoint</span></div>
+        <div class="stat-box"><b id="ms">—</b><span>Latency</span></div>
+      </div>
+      <div class="controls-row">
+        <button id="btnStart">Start</button>
+        <button id="btnPause" class="ghost">Pause</button>
+        <button id="btnReset" class="ghost">New Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Column 2: Coach + Decision ======== -->
+  <div class="col">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Coach Jev — Instruction Following</h2>
+        <span class="badge outline">Natural Language</span>
+      </div>
+      <div class="row">
+        <input id="instr" type="text" maxlength="120" placeholder='e.g. "play safe" or "be aggressive, chase food"'>
+        <button id="btnStyle" style="flex:0 0 auto; padding:6px 14px;">Apply</button>
+      </div>
+      <div class="chips">
+        <span class="chip" data-s="play safe, avoid tight spaces and your tail">🛡️ safe</span>
+        <span class="chip" data-s="be aggressive, chase the food as directly as possible">🔥 aggressive</span>
+        <span class="chip" data-s="prefer calm loops near the border, take food only when it is clearly safe">🌀 border loops</span>
+        <span class="chip" data-s="">♻️ clear</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Last Jev Decision — Waypoint Choice</h2>
+        <span class="badge fb" id="src">idle</span>
+      </div>
+      <div class="decision">
+        <div class="dec-target">
+          <span class="dec-label">Active Target</span>
+          <b id="act" style="font-size:15px; color:var(--ink);">—</b>
+        </div>
+        <div class="prob"><span>confidence</span><div class="bar"><i id="confBar" style="width:0%"></i></div><span id="confVal">—</span></div>
+        <div id="probs"></div>
+      </div>
+    </div>
+
+    <div class="panel flex-fill">
+      <div class="panel-head">
+        <h2>Decision Log</h2>
+        <span class="badge outline" id="logPill">Live Events</span>
+      </div>
+      <div class="klog" id="klog"><div>waiting…</div></div>
+    </div>
+  </div>
+
+  <!-- ======== Column 3: Token Usage & Economics ======== -->
+  <div class="col">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Token Usage — This Session</h2>
+        <span class="badge outline">Live Session</span>
+      </div>
+      <div class="usage-grid">
+        <div class="ucell"><b id="sTokIn">0</b><span>Input Tokens</span></div>
+        <div class="ucell"><b id="sTokOut">0</b><span>Output (Free)</span></div>
+        <div class="ucell"><b id="sCost">$0.000000</b><span>Session Cost</span></div>
+        <div class="ucell"><b id="sCalls">0</b><span>Jev Decisions</span></div>
+      </div>
+      <div class="unote">Calculated live at official Jev rate: <b style="color:var(--ink)">$0.042 / 1M input tokens</b>.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Token Usage — Server Lifetime</h2>
+        <span class="badge outline">Global Pool</span>
+      </div>
+      <div class="usage-grid">
+        <div class="ucell"><b id="lTokIn">0</b><span>Input Tokens</span></div>
+        <div class="ucell"><b id="lCost">$0.000000</b><span>Total Cost</span></div>
+        <div class="ucell"><b id="lCalls">0</b><span>Jev Calls</span></div>
+        <div class="ucell"><b id="lGames" style="font-size:13px; line-height:1.9">—</b><span>Per-Game Avg</span></div>
+      </div>
+      <div class="unote">Aggregates decisions across all players · Refreshes every 10s.</div>
+    </div>
+
+    <div class="panel flex-fill">
+      <div class="panel-head">
+        <h2>Pricing Model &amp; Quota</h2>
+        <span class="badge jev">Zero Output Fee</span>
+      </div>
+      <div class="econ-list">
+        <div class="econ-card">
+          <div class="econ-head">
+            <span class="econ-title">Official Jev Pricing</span>
+            <span class="econ-value">$0.042 / 1M</span>
+          </div>
+          <span class="econ-desc">$42 per 1B input tokens ($0.042 per Mtok). Output tokens are 100% free.</span>
+        </div>
+        <div class="econ-card">
+          <div class="econ-head">
+            <span class="econ-title">Cost Per Decision</span>
+            <span class="econ-value">~$0.00003</span>
+          </div>
+          <span class="econ-desc">Each Choice payload uses ~600–750 input tokens. A 300-tick game costs ~$0.0005.</span>
+        </div>
+        <div class="econ-card">
+          <div class="econ-head">
+            <span class="econ-title">Abuse Guard Rate Limit</span>
+            <span class="econ-value">120 req / 30s</span>
+          </div>
+          <span class="econ-desc">Active token bucket per client IP in FastAPI to protect TypeSafe API quota.</span>
+        </div>
+        <div class="econ-card">
+          <div class="econ-head">
+            <span class="econ-title">Model Identifier</span>
+            <span class="econ-value" style="color:var(--acc);">jev-latest</span>
+          </div>
+          <span class="econ-desc">TypeSafe System One choice model via <code>api.typesafe.ai/v1/systemone</code>.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="foot-left">
+    <button id="btnInfo" class="info-btn" title="View System Architecture" aria-label="System Architecture">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+    </button>
+    <b>Jev Snake</b> · TypeSafe System One Decision Model Showcase
+  </div>
+  <div class="foot-right">
+    <span>Slow judgment ⇄ fast execution</span> · <span>VPS-direct latency: ~40ms</span>
+  </div>
+</footer>
+
+<!-- ======== System Architecture Modal ======== -->
+<div id="archModal" class="modal-backdrop" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title" id="modalTitle">Strategist ⇄ Executor Architecture</h2>
+        <span class="modal-subtitle">System Design &amp; Latency Decoupling</span>
+      </div>
+      <button class="modal-close" id="btnCloseModal" aria-label="Close modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="arch-card">
+        <span class="arch-card-icon">🧠</span>
+        <div class="arch-card-content">
+          <h3>Strategist: TypeSafe Jev (~2.6s cadence)</h3>
+          <p>A System One model running on TypeSafe's Choice API. Evaluates the global board state and player coaching instructions, picking between strategic waypoints (<code>food</code>, <code>open_area</code>, <code>border_loop</code>) with calibrated probabilities.</p>
+        </div>
+      </div>
+      <div class="arch-card">
+        <span class="arch-card-icon">⚡</span>
+        <div class="arch-card-content">
+          <h3>Executor: Deterministic Local Code (160ms tick)</h3>
+          <p>Runs tick-by-tick in the browser canvas. Executes greedy pathfinding toward the active waypoint, strictly guarded by a BFS flood-fill seatbelt that automatically vetoes moves into trapped pockets with &lt;8 free cells.</p>
+        </div>
+      </div>
+      <div class="arch-card">
+        <span class="arch-card-icon">🛡️</span>
+        <div class="arch-card-content">
+          <h3>Lag Immunity &amp; Real-Time Decoupling</h3>
+          <p>Waypoints remain valid across many ticks. Because the model chooses targets rather than raw directional inputs, API latency (~40ms to ~800ms) can never freeze the snake or cause a collision.</p>
+        </div>
+      </div>
+      <div class="arch-card">
+        <span class="arch-card-icon">💰</span>
+        <div class="arch-card-content">
+          <h3>Token Economics</h3>
+          <p>At $0.042 / 1M input tokens and free output tokens, each decision costs ~$0.00003. An entire 300-tick game uses only ~$0.0005, making real-time model integration exceptionally cost-effective.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const N = 24;
+const cv = document.getElementById('board'), cx = cv.getContext('2d');
+const CELL = cv.width / N;
+const TICK_MS = 160;
+const STRAT_MS = 2600;
+const OPTIONS = ["food", "open_area", "border_loop"];
+const DELTA = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+const DIRS = [["up",0,-1],["down",0,1],["left",-1,0],["right",1,0]];
+const PRICE_IN_MTOK = 0.042, PRICE_OUT_MTOK = 0.0;
+
+let snake, dir, dirName, food, score, ticks, alive, running = false;
+let styleInstr = "", inflight = false, loopTimer = null, stratTimer = null, usageTimer = null;
+let waypoint = null, waypointName = "—";
+let sess = { tin:0, tout:0, calls:0 };
+
+function key(x,y){ return x+','+y; }
+function bodySet(skipTail){
+  const s=new Set();
+  const end = snake.length - (skipTail?1:0);
+  for(let i=0;i<end;i++) s.add(key(snake[i].x,snake[i].y));
+  return s;
+}
+function freeCells(){
+  const taken = bodySet(false);
+  const out=[];
+  for(let x=0;x<N;x++) for(let y=0;y<N;y++) if(!taken.has(key(x,y))) out.push({x,y});
+  return out;
+}
+function reset(){
+  snake=[{x:8,y:12},{x:7,y:12},{x:6,y:12}];
+  dir={x:1,y:0}; dirName="right"; score=0; ticks=0; alive=true;
+  inflight=false; waypoint=null; waypointName="—";
+  placeFood(); draw(); updateStats();
+}
+function placeFood(){
+  const free=freeCells();
+  food = free.length ? free[(Math.random()*free.length)|0] : {x:0,y:0};
+}
+function flood(walls, sx, sy, cap){
+  cap = cap || 80;
+  const seen=new Set([key(sx,sy)]); const q=[[sx,sy]]; let c=0;
+  while(q.length && c<cap){
+    const [x,y]=q.shift(); c++;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy, k=key(nx,ny);
+      if(nx<0||ny<0||nx>=N||ny>=N||seen.has(k)||walls.has(k)) continue;
+      seen.add(k); q.push([nx,ny]);
+    }
+  }
+  return c;
+}
+function currentLegal(){
+  const head=snake[0], out=[];
+  for(const [name,dx,dy] of DIRS){
+    if(dx===-dir.x && dy===-dir.y) continue;
+    const nx=head.x+dx, ny=head.y+dy;
+    if(nx<0||ny<0||nx>=N||ny>=N) continue;
+    const walls=bodySet(true);
+    if(walls.has(key(nx,ny))) continue;
+    out.push({name,nx,ny,space:flood(walls,nx,ny)});
+  }
+  return out;
+}
+function openAreaPoint(){
+  const walls=bodySet(false), head=snake[0];
+  const seen=new Set([key(head.x,head.y)]); const q=[[head.x,head.y,0]];
+  let far={x:head.x,y:head.y,d:0};
+  while(q.length){
+    const [x,y,d]=q.shift();
+    if(d>far.d) far={x,y,d};
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy, k=key(nx,ny);
+      if(nx<0||ny<0||nx>=N||ny>=N||seen.has(k)||walls.has(k)) continue;
+      seen.add(k); q.push([nx,ny,d+1]);
+    }
+  }
+  return {x:far.x, y:far.y};
+}
+function borderPoint(){
+  const free=freeCells();
+  const edge=free.filter(c=>c.x===0||c.y===0||c.x===N-1||c.y===N-1);
+  const head=snake[0];
+  if(!edge.length) return openAreaPoint();
+  return edge.sort((a,b)=>(Math.abs(a.x-head.x)+Math.abs(a.y-head.y))-(Math.abs(b.x-head.x)+Math.abs(b.y-head.y)))[0];
+}
+function waypointFor(name){
+  if(name==="open_area") return openAreaPoint();
+  if(name==="border_loop") return borderPoint();
+  return {x:food.x, y:food.y};
+}
+function jevDecide(){
+  if(inflight || !alive || !running) return;
+  inflight=true;
+  const body={
+    legal: OPTIONS,
+    state: {
+      head:{x:snake[0].x,y:snake[0].y},
+      food:{x:food.x,y:food.y},
+      snake_length:snake.length, tick:ticks, grid:`${N}x${N}`,
+      waypoints:{ food:waypointFor("food"), open_area:waypointFor("open_area"), border_loop:waypointFor("border_loop") },
+    },
+    instruction: styleInstr||null,
+  };
+  const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),3500);
+  fetch('/api/decide',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal})
+    .then(r=>{ clearTimeout(to); if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+    .then(res=>{
+      inflight=false;
+      if(!running||!alive) return;
+      if(res && res.action && OPTIONS.includes(res.action)){
+        waypoint=waypointFor(res.action); waypointName=res.action;
+        showDecision(res);
+        addUsage(res);
+        log(`t${ticks} 🎯 waypoint → ${res.action} (conf ${(res.confidence??0).toFixed(2)}, ${res.elapsed_ms||0}ms, ${res.input_tokens||0} tok)`);
+      }
+    })
+    .catch(()=>{ clearTimeout(to); inflight=false; });
+}
+function deadlySet(legal){
+  const head=snake[0], dead=new Set();
+  for(const m of legal){
+    const nx=head.x+DELTA[m.name][0], ny=head.y+DELTA[m.name][1];
+    const fake=snake.map(s=>({x:s.x,y:s.y}));
+    fake.unshift({x:nx,y:ny});
+    const eat=(nx===food.x&&ny===food.y);
+    if(!eat) fake.pop();
+    const wallSet=new Set(fake.slice(0,-1).map(s=>key(s.x,s.y)));
+    if(flood(wallSet,nx,ny)<8) dead.add(m.name);
+  }
+  return dead;
+}
+function steer(){
+  const legal=currentLegal();
+  if(legal.length===0) return die();
+  const dead=deadlySet(legal);
+  let pool=legal.filter(m=>!dead.has(m.name));
+  const tgt = waypoint || food;
+  let best=null, bd=1e9;
+  for(const m of pool){
+    const d=Math.abs(tgt.x-m.nx)+Math.abs(tgt.y-m.ny);
+    if(d<bd || (d===bd && best && m.space>best.space)){ bd=d; best=m; }
+  }
+  if(!best){
+    best=legal.sort((a,b)=>b.space-a.space)[0];
+    if(ticks%8===0) log(`t${ticks} ⚠ last-stand → ${best.name}`);
+  }
+  dirName=best.name; dir={x:DELTA[best.name][0], y:DELTA[best.name][1]};
+}
+function moveSnake(){
+  const h={x:snake[0].x+dir.x, y:snake[0].y+dir.y};
+  if(h.x<0||h.y<0||h.x>=N||h.y>=N) return die();
+  const eat=(h.x===food.x&&h.y===food.y);
+  const end = eat ? snake.length : snake.length-1;
+  for(let i=0;i<end;i++) if(snake[i].x===h.x&&snake[i].y===h.y) return die();
+  snake.unshift(h);
+  if(eat){
+    score+=10; placeFood();
+    if(waypointName==="food") waypoint=null;
+  } else snake.pop();
+  ticks++;
+}
+function tick(){
+  if(!alive || !running) return;
+  steer();
+  if(waypoint && waypointName!=="food" && Math.abs(snake[0].x-waypoint.x)+Math.abs(snake[0].y-waypoint.y)<=1){
+    waypoint=null;
+  }
+  moveSnake(); draw(); updateStats();
+  if(!waypoint) jevDecide();
+}
+function startLoop(){
+  stopLoop();
+  loopTimer=setInterval(tick, TICK_MS);
+  stratTimer=setInterval(()=>{ if(running&&alive) jevDecide(); }, STRAT_MS);
+  if(!usageTimer) usageTimer=setInterval(refreshLifetime, 10000);
+}
+function stopLoop(){
+  if(loopTimer){ clearInterval(loopTimer); loopTimer=null; }
+  if(stratTimer){ clearInterval(stratTimer); stratTimer=null; }
+}
+function die(){
+  alive=false; running=false; stopLoop();
+  log(`💀 died at tick ${ticks}, score ${score}`);
+  setButtons();
+}
+function updateStats(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('len').textContent=snake.length;
+  document.getElementById('ticks').textContent=ticks;
+  document.getElementById('wp').textContent=waypointName;
+}
+function draw(){
+  cx.fillStyle='#0a0a0b'; cx.fillRect(0,0,cv.width,cv.height);
+  cx.strokeStyle='rgba(255,255,255,.045)';
+  for(let i=1;i<N;i++){
+    cx.beginPath(); cx.moveTo(i*CELL,0); cx.lineTo(i*CELL,cv.height); cx.stroke();
+    cx.beginPath(); cx.moveTo(0,i*CELL); cx.lineTo(cv.width,i*CELL); cx.stroke();
+  }
+  cx.fillStyle='#f97316'; cx.beginPath();
+  cx.arc(food.x*CELL+CELL/2, food.y*CELL+CELL/2, CELL/2-3, 0, 7); cx.fill();
+  if(waypoint && waypointName!=="food"){
+    cx.strokeStyle='rgba(34,197,94,.75)'; cx.setLineDash([4,3]);
+    cx.strokeRect(waypoint.x*CELL+2, waypoint.y*CELL+2, CELL-4, CELL-4);
+    cx.setLineDash([]);
+  }
+  snake.forEach((s,i)=>{ const t=i/snake.length;
+    cx.fillStyle = i===0 ? '#fb923c' : `rgba(249,115,22,${0.9-0.6*t})`;
+    cx.fillRect(s.x*CELL+1, s.y*CELL+1, CELL-2, CELL-2); });
+  if(!alive){ cx.fillStyle='rgba(0,0,0,.55)'; cx.fillRect(0,0,cv.width,cv.height);
+    cx.fillStyle='#e8e8ea'; cx.font='bold 24px sans-serif'; cx.textAlign='center';
+    cx.fillText('Game over', cv.width/2, cv.height/2-8);
+    cx.font='13px sans-serif'; cx.fillStyle='#9a9aa2'; cx.fillText('score '+score, cv.width/2, cv.height/2+16); }
+}
+function showDecision(res){
+  const src=document.getElementById('src');
+  src.textContent = res.source==='jev' ? 'JEV' : 'fallback';
+  src.className = 'badge ' + (res.source==='jev'?'jev':'fb');
+  document.getElementById('act').textContent = res.action;
+  if(res.elapsed_ms) document.getElementById('ms').textContent = res.elapsed_ms+'ms';
+  document.getElementById('confVal').textContent = (res.confidence??0).toFixed(2);
+  document.getElementById('confBar').style.width = ((res.confidence??0)*100)+'%';
+  const p = document.getElementById('probs'); p.innerHTML='';
+  const entries = Object.entries(res.probabilities||{}).sort((a,b)=>b[1]-a[1]);
+  for(const [k,v] of entries){
+    p.insertAdjacentHTML('beforeend',
+      `<div class="prob"><span>${k}</span><div class="bar"><i style="width:${v*100}%"></i></div><span>${v.toFixed(2)}</span></div>`);
+  }
+}
+function addUsage(res){
+  sess.tin += res.input_tokens||0;
+  sess.tout += res.output_tokens||0;
+  sess.calls += 1;
+  const cost = sess.tin/1e6*PRICE_IN_MTOK + sess.tout/1e6*PRICE_OUT_MTOK;
+  document.getElementById('sTokIn').textContent = sess.tin.toLocaleString('en-US');
+  document.getElementById('sTokOut').textContent = sess.tout.toLocaleString('en-US');
+  document.getElementById('sCost').textContent = '$'+cost.toFixed(6);
+  document.getElementById('sCalls').textContent = sess.calls;
+}
+function refreshLifetime(){
+  fetch('/api/usage').then(r=>r.json()).then(u=>{
+    document.getElementById('lTokIn').textContent = (u.input_tokens||0).toLocaleString('en-US');
+    document.getElementById('lCost').textContent = '$'+(u.cost_usd||0).toFixed(6);
+    document.getElementById('lCalls').textContent = u.requests||0;
+    const calls = u.requests||0;
+    document.getElementById('lGames').textContent = calls ? '~'+Math.max(1,Math.round(calls/15))+' games' : '—';
+  }).catch(()=>{});
+}
+function log(msg){
+  const el=document.getElementById('klog');
+  if(el.firstChild && el.firstChild.textContent==='waiting…') el.innerHTML='';
+  const row=document.createElement('div');
+  row.textContent=msg;  // text-content only — never render log strings as HTML (CWE-79)
+  el.prepend(row);
+  const lp=document.getElementById('logPill');
+  if (lp) {
+    const count=el.children.length;
+    lp.textContent=`${count} event${count === 1 ? '' : 's'}`;
+  }
+}
+function setButtons(){
+  document.getElementById('btnStart').disabled=running;
+  document.getElementById('btnPause').disabled=!running;
+  const ab = document.getElementById('arenaBadge');
+  if (ab) {
+    if (running) {
+      ab.textContent = 'PLAYING';
+      ab.className = 'badge jev';
+    } else if (alive) {
+      ab.textContent = ticks > 0 ? 'PAUSED' : 'READY';
+      ab.className = 'badge outline';
+    } else {
+      ab.textContent = 'GAME OVER';
+      ab.className = 'badge fb';
+    }
+  }
+}
+document.getElementById('btnStart').onclick = ()=>{ if(!alive) reset(); running=true; setButtons(); startLoop(); jevDecide(); };
+document.getElementById('btnPause').onclick = ()=>{ running=false; stopLoop(); setButtons(); };
+document.getElementById('btnReset').onclick = ()=>{ running=false; stopLoop(); reset(); setButtons(); };
+document.getElementById('btnStyle').onclick = ()=>{
+  styleInstr=document.getElementById('instr').value.trim();
+  waypoint=null;
+  log(`🎛️ style: ${styleInstr||'(clear)'}`);
+};
+document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+  document.getElementById('instr').value=c.dataset.s;
+  document.getElementById('btnStyle').click();
+});
+
+// Modal event listeners
+const modal = document.getElementById('archModal');
+document.getElementById('btnInfo').onclick = () => { modal.style.display = 'flex'; };
+document.getElementById('btnCloseModal').onclick = () => { modal.style.display = 'none'; };
+modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && modal.style.display === 'flex') modal.style.display = 'none';
+});
+
+reset(); setButtons(); refreshLifetime();
+fetch('/api/status').then(r=>r.json()).then(s=>{
+  if(!(s.jev_key_configured && !s.jev_down)) log('⚠ Jev offline — running in fallback mode');
+  document.getElementById('modelInfo').textContent = (s.jev_key_configured && !s.jev_down) ? 'jev-latest (live)' : 'fallback mode';
+});
+</script>
+</body>
+</html>
